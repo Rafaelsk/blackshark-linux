@@ -77,22 +77,30 @@ pub fn send_no_wait(dev: &HidDevice, report: &Report) -> Result<()> {
 pub fn send(dev: &HidDevice, report: &Report) -> Result<Report> {
     dev.write(report.as_bytes()).context("HID write failed")?;
 
-    let mut buf = [0u8; REPORT_LEN];
-    let n = dev
-        .read_timeout(&mut buf, 5_000)
-        .context("HID read failed")?;
+    let expected = report.as_bytes();
 
-    if n != REPORT_LEN {
-        bail!("short read: expected {REPORT_LEN} bytes, got {n}");
-    }
+    loop {
+        let mut buf = [0u8; REPORT_LEN];
+        let n = dev
+            .read_timeout(&mut buf, 5_000)
+            .context("HID read failed")?;
 
-    let response = Report::from_bytes(buf);
+        if n != REPORT_LEN {
+            bail!("short read: expected {REPORT_LEN} bytes, got {n}");
+        }
 
-    match response.status() {
-        ResponseStatus::Ok => Ok(response),
-        other => bail!(
-            "device returned error status: {other:?} (raw=0x{:02x})",
-            response.as_bytes()[1]
-        ),
+        let response = Report::from_bytes(buf);
+
+        if response.as_bytes()[2] != expected[2] || response.as_bytes()[10] != expected[10] {
+            continue;
+        }
+
+        return match response.status() {
+            ResponseStatus::Ok => Ok(response),
+            other => bail!(
+                "device returned error status: {other:?} (raw=0x{:02x})",
+                response.as_bytes()[1]
+            ),
+        };
     }
 }
