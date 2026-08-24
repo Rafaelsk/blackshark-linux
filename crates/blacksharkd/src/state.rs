@@ -1,8 +1,16 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MicMuteState {
+    Unknown,
+    Unmuted,
+    Muted,
+}
+
 #[derive(Clone, Debug)]
 pub struct SharedState {
     pub connected: bool,
     pub battery_pct: u8,
     pub charging: bool,
+    pub mic_mute: MicMuteState,
     pub sidetone: u8,
     pub eq_preset: u8,
     pub thx_enabled: bool,
@@ -17,6 +25,7 @@ impl Default for SharedState {
             connected: false,
             battery_pct: 0,
             charging: false,
+            mic_mute: MicMuteState::Unknown,
             sidetone: 0,
             eq_preset: 0,
             thx_enabled: false,

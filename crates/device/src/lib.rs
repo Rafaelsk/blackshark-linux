@@ -104,3 +104,17 @@ pub fn send(dev: &HidDevice, report: &Report) -> Result<Report> {
         };
     }
 }
+
+pub fn read(dev: &HidDevice, timeout_ms: i32) -> Result<Option<Report>> {
+    let mut buf = [0u8; REPORT_LEN];
+
+    let n = dev
+        .read_timeout(&mut buf, timeout_ms)
+        .context("HID read failed")?;
+
+    match n {
+        0 => Ok(None),
+        REPORT_LEN => Ok(Some(Report::from_bytes(buf))),
+        other => bail!("short read: expected {REPORT_LEN} bytes, got {other}"),
+    }
+}

@@ -10,3 +10,4 @@ kernel/.*.cmd
 kernel/modules.order
 kernel/Module.symvers
 kernel/.module-common.o
+.idea/

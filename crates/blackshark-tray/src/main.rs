@@ -17,6 +17,7 @@ struct HeadsetState {
     anc_level: u8,
     power_savings: u8,
     daemon_status: String,
+    mic_mute: String,
 }
 
 impl Default for HeadsetState {
@@ -32,6 +33,7 @@ impl Default for HeadsetState {
             anc_level: 0,
             power_savings: 0,
             daemon_status: "unknown".into(),
+            mic_mute: "unknown".into(),
         }
     }
 }
@@ -52,7 +54,13 @@ impl Tray for BlacksharkTray {
     }
 
     fn icon_name(&self) -> String {
-        "audio-headset".into()
+        let s = self.state.lock().unwrap();
+
+        if s.mic_mute == "muted" {
+            "audio-headphones".into()
+        } else {
+            "audio-headset".into()
+        }
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
@@ -396,6 +404,7 @@ async fn main() -> Result<()> {
                 anc_enabled,
                 anc_level,
                 power_savings,
+                mic_mute,
             ) = if connected {
                 (
                     proxy.battery_percentage().await.unwrap_or(0),
@@ -405,9 +414,13 @@ async fn main() -> Result<()> {
                     proxy.anc_enabled().await.unwrap_or(false),
                     proxy.anc_level().await.unwrap_or(1),
                     proxy.power_savings_minutes().await.unwrap_or(0),
+                    proxy
+                        .mic_mute_state()
+                        .await
+                        .unwrap_or_else(|_| "unknown".into()),
                 )
             } else {
-                (0, 0, 0, false, false, 0, 0)
+                (0, 0, 0, false, false, 0, 0, "unknown".into())
             };
             let mut s = state.lock().unwrap();
             s.connected = connected;
@@ -419,6 +432,7 @@ async fn main() -> Result<()> {
                 s.anc_enabled = anc_enabled;
                 s.anc_level = anc_level;
                 s.power_savings = power_savings;
+                s.mic_mute = mic_mute;
             }
         }
     }
@@ -457,6 +471,7 @@ async fn main() -> Result<()> {
 
         let mut battery_stream = proxy.receive_battery_changed().await.ok();
         let mut connected_stream = proxy.receive_connected_changed().await;
+        let mut mic_mute_stream = proxy.receive_mic_mute_state_changed().await;
         let mut sidetone_stream = proxy.receive_sidetone_changed().await;
         let mut thx_stream = proxy.receive_thx_enabled_changed().await;
         let mut eq_stream = proxy.receive_eq_preset_changed().await;
@@ -466,57 +481,63 @@ async fn main() -> Result<()> {
 
         loop {
             tokio::select! {
-                Some(sig) = async { battery_stream.as_mut()?.next().await } => {
-                    if let Ok(args) = sig.args() {
-                        let mut s = state2.lock().unwrap();
-                        s.battery_pct = args.percentage;
-                        s.charging    = args.charging;
-                    }
-                    handle.update(|_| {});
+                            Some(sig) = async { battery_stream.as_mut()?.next().await } => {
+                                if let Ok(args) = sig.args() {
+                                    let mut s = state2.lock().unwrap();
+                                    s.battery_pct = args.percentage;
+                                    s.charging    = args.charging;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = connected_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().connected = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = mic_mute_stream.next() => {
+                if let Ok(val) = change.get().await {
+                    state2.lock().unwrap().mic_mute = val;
                 }
-                Some(change) = connected_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().connected = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = sidetone_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().sidetone = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = thx_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().thx_enabled = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = eq_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().eq_preset = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = anc_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().anc_enabled = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = anc_level_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().anc_level = val;
-                    }
-                    handle.update(|_| {});
-                }
-                Some(change) = ps_stream.next() => {
-                    if let Ok(val) = change.get().await {
-                        state2.lock().unwrap().power_savings = val;
-                    }
-                    handle.update(|_| {});
-                }
+                handle.update(|_| {});
             }
+                            Some(change) = sidetone_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().sidetone = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = thx_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().thx_enabled = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = eq_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().eq_preset = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = anc_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().anc_enabled = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = anc_level_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().anc_level = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = ps_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().power_savings = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                        }
         }
     });
 

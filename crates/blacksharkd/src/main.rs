@@ -133,6 +133,11 @@ async fn main() -> Result<()> {
             // Emit PropertiesChanged for any state that changed.
             let mut changed: HashMap<&str, &Value<'_>> = HashMap::new();
             let v_connected = Value::from(state.connected);
+            let v_mic_mute = Value::from(match state.mic_mute {
+                state::MicMuteState::Unknown => "unknown",
+                state::MicMuteState::Unmuted => "unmuted",
+                state::MicMuteState::Muted => "muted",
+            });
             let v_battery = Value::from(state.battery_pct);
             let v_sidetone = Value::from(state.sidetone);
             let v_eq = Value::from(state.eq_preset);
@@ -142,6 +147,9 @@ async fn main() -> Result<()> {
             let v_ps = Value::from(state.power_savings_minutes);
             if state.connected != prev.connected {
                 changed.insert("Connected", &v_connected);
+            }
+            if state.mic_mute != prev.mic_mute {
+                changed.insert("MicMuteState", &v_mic_mute);
             }
             if state.battery_pct != prev.battery_pct {
                 changed.insert("BatteryPercentage", &v_battery);

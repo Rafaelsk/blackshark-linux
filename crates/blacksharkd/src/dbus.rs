@@ -3,7 +3,7 @@ use zbus::interface;
 
 use crate::config::Config;
 use crate::hid_actor::{BatteryState, HidCommand};
-use crate::state::SharedState;
+use crate::state::{MicMuteState, SharedState};
 
 pub struct HeadsetInterface {
     cmd_tx: mpsc::Sender<HidCommand>,
@@ -129,6 +129,16 @@ impl HeadsetInterface {
     #[zbus(property)]
     async fn connected(&self) -> bool {
         self.state_rx.borrow().connected
+    }
+
+    /// Current physical microphone mute state.
+    #[zbus(property)]
+    async fn mic_mute_state(&self) -> &'static str {
+        match self.state_rx.borrow().mic_mute {
+            MicMuteState::Unknown => "unknown",
+            MicMuteState::Unmuted => "unmuted",
+            MicMuteState::Muted => "muted",
+        }
     }
 
     /// Cached battery percentage (updated every 5 minutes or on explicit GetBattery call).

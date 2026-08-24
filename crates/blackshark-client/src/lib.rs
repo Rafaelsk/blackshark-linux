@@ -43,6 +43,10 @@ pub trait Headset {
     #[zbus(property)]
     fn connected(&self) -> zbus::Result<bool>;
 
+    /// Current physical microphone mute state.
+    #[zbus(property)]
+    fn mic_mute_state(&self) -> zbus::Result<String>;
+
     /// Cached battery percentage.
     #[zbus(property)]
     fn battery_percentage(&self) -> zbus::Result<u8>;
