@@ -60,9 +60,10 @@ cd blackshark-linux
 ./install.sh
 ```
 
-The installer builds the workspace when prebuilt binaries are not present,
-installs binaries under `~/.local/bin`, installs the user service, and installs
-the udev rules using `sudo`.
+In a Git checkout, the installer builds the workspace and installs directly
+from `target/release`. Packaged releases may instead provide prebuilt binaries.
+It installs the binaries under `~/.local/bin`, installs the user service, and
+installs the udev rules using `sudo`.
 
 If your user is not in the `users` group:
 

@@ -11,6 +11,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="${HOME}/.local/bin"
 SYSTEMD_DIR="${HOME}/.config/systemd/user"
 UDEV_DIR="/etc/udev/rules.d"
+BINARIES=(blacksharkd blackshark-ctl blackshark-tray blackshark-gui)
 
 # Colours
 RED='\033[0;31m'
@@ -27,12 +28,21 @@ die()   { echo -e "${RED}error: $*${NC}" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 
 PREBUILT=true
-for bin in blacksharkd blackshark-ctl blackshark-tray blackshark-gui; do
-    if [[ ! -x "${REPO_DIR}/${bin}" ]]; then
-        PREBUILT=false
-        break
-    fi
-done
+BINARY_DIR="$REPO_DIR"
+
+# A Git checkout should build the current source even if stale binaries happen
+# to exist in the repository root. Release archives may include pre-built
+# binaries alongside this script.
+if [[ -e "${REPO_DIR}/.git" ]]; then
+    PREBUILT=false
+else
+    for bin in "${BINARIES[@]}"; do
+        if [[ ! -x "${REPO_DIR}/${bin}" ]]; then
+            PREBUILT=false
+            break
+        fi
+    done
+fi
 
 # ---------------------------------------------------------------------------
 # Checks
@@ -67,9 +77,7 @@ else
     info "Building release binaries (this may take a minute)"
     cd "$REPO_DIR"
     cargo build --release -p blacksharkd -p blackshark-ctl -p blackshark-tray -p blackshark-gui
-    for bin in blacksharkd blackshark-ctl blackshark-tray blackshark-gui; do
-        cp "target/release/${bin}" "${REPO_DIR}/${bin}"
-    done
+    BINARY_DIR="${REPO_DIR}/target/release"
     ok
 fi
 
@@ -80,8 +88,8 @@ fi
 info "Installing binaries to ${BIN_DIR}"
 mkdir -p "$BIN_DIR"
 
-for bin in blacksharkd blackshark-ctl blackshark-tray blackshark-gui; do
-    install -m755 "${REPO_DIR}/${bin}" "${BIN_DIR}/${bin}"
+for bin in "${BINARIES[@]}"; do
+    install -m755 "${BINARY_DIR}/${bin}" "${BIN_DIR}/${bin}"
     echo "    ${BIN_DIR}/${bin}"
 done
 ok
