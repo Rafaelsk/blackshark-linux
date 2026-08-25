@@ -1,229 +1,163 @@
-# blackshark-ctl
+# blackshark-linux
 
-Linux userspace driver for the **Razer BlackShark V3 Pro** wireless headset (PC and Xbox editions).
+Linux userspace support for the Razer BlackShark V3 Pro, with tested support
+for the Xbox edition on CachyOS/Arch, KDE Plasma, and Wayland.
 
-Controls sidetone, EQ presets, THX Spatial Audio, Active Noise Cancellation, and power savings — without Razer Synapse or Windows.
+This is a maintained fork of
+[RiskRunner0/blackshark-linux](https://github.com/RiskRunner0/blackshark-linux).
+It keeps the original daemon, D-Bus, CLI, tray, and GUI architecture while
+adding Xbox-device support, reliable HID response matching, physical microphone
+mute state, and wired USB transport detection.
 
----
+## Supported devices
+
+| Device | USB ID | Status |
+| --- | --- | --- |
+| BlackShark V3 Pro PC dongle | `1532:0577` | Supported by upstream; not independently tested in this fork |
+| BlackShark V3 Pro Xbox dongle | `1532:0a55` | Supported and tested |
+| BlackShark V3 Pro Xbox wired USB | `1532:0a4e` | USB audio handled by Linux; transport presence detected |
+
+The daemon controls the headset through the wireless dongle. When the Xbox
+headset is connected by cable, Linux exposes a separate USB-audio device and
+the daemon reports the active transport as `usb`.
+
+The wired HID interface does not answer the proprietary command protocol and
+does not expose physical mute changes through HID or USB Audio. Wired physical
+mute state is therefore reported as `unknown` rather than guessed.
 
 ## Features
 
-- **Sidetone** — mic monitoring level (0–15)
-- **EQ presets** — all 9 named Synapse presets (Flat, Bass Boost, FPS, etc.)
-- **THX Spatial Audio** — toggle surround sound on/off
-- **ANC** — enable/disable and set level (1–4)
-- **Power savings** — auto-off timeout (off, 15, 30, 45, 60 min)
-- **Battery** — percentage and charging status, polled every 5 minutes
-- **Transport detection** — reports wireless, wired USB, or disconnected state
-- **Settings persist** — config saved to `~/.config/blackshark/config.toml`, restored on reconnect
-- **System tray** — battery %, quick toggles, EQ/sidetone submenus, daemon controls
-- **GUI** — full settings panel with live updates
-- **CLI** — scriptable control and JSON status output
-
-![Device tab showing battery, connection status and audio controls](assets/Device_page.png)
-*GUI settings panel — Device tab*
-
-![System tray menu with headset controls and daemon status](assets/tray_icon.png)
-*System tray with quick-access controls*
-
----
+- Battery percentage and charging state
+- Physical microphone mute state over the wireless transport
+- Wireless, wired USB, and disconnected transport state
+- Sidetone level
+- Nine EQ presets
+- THX Spatial Audio toggle
+- Active Noise Cancellation toggle and level
+- Power-saving timeout
+- Persistent configuration restored after reconnect
+- D-Bus service with CLI, system tray, and Slint GUI clients
+- Optional experimental PipeWire game/chat mix
 
 ## Requirements
 
-- Linux (tested on Arch/CachyOS with KDE Plasma + Wayland)
-- Rust (stable) — [rustup.rs](https://rustup.rs)
-- systemd (user session)
-- PipeWire or PulseAudio (optional — only needed for the experimental game/chat mix feature)
+- Linux with systemd user services
+- Rust stable when building from source
+- A user in the `users` group for HID access
+- PipeWire or PulseAudio only for the optional game/chat mix feature
 
-> **Firmware note:** Firmware 1.3.x or later is required on both the headset and dongle.
-> Users on 1.2.x have reported the daemon sees the dongle but cannot communicate with the headset.
-> Update firmware via Razer Synapse on Windows before switching to Linux. (See [#1](https://github.com/RiskRunner0/blackshark-linux/issues/1))
+Firmware 1.3.x or newer is recommended for both headset and dongle. Older
+firmware may expose the dongle without allowing the daemon to communicate with
+the headset. See upstream [issue #1](https://github.com/RiskRunner0/blackshark-linux/issues/1).
 
----
+## Install
 
-## Quick install
-
-**Option A — pre-built release (recommended):**
-
-1. Download the latest release tarball from the [Releases page](https://github.com/RiskRunner0/blackshark-linux/releases)
-2. Extract and run:
-   ```bash
-   tar xzf blackshark-ctl-*.tar.gz
-   cd blackshark-ctl-*
-   ./install.sh
-   ```
-
-**Option B — build from source:**
+Clone this fork and run the installer:
 
 ```bash
-git clone https://github.com/RiskRunner0/blackshark-linux.git
+git clone https://github.com/Rafaelsk/blackshark-linux.git
 cd blackshark-linux
 ./install.sh
 ```
 
-The script installs the binaries to `~/.local/bin/`, starts the daemon as a systemd user service, and installs the udev rule (requires `sudo`) so the daemon can access the headset without root.
+The installer builds the workspace when prebuilt binaries are not present,
+installs binaries under `~/.local/bin`, installs the user service, and installs
+the udev rules using `sudo`.
 
----
+If your user is not in the `users` group:
 
-## Getting started
-
-After install, plug in the USB dongle. Then:
-
-**1. Check the daemon is running:**
 ```bash
-systemctl --user status blacksharkd
+sudo usermod -aG users "$USER"
 ```
 
-**2. Verify the headset is detected:**
+Log out and back in before reinstalling or reconnecting the dongle.
+
+## Use
+
 ```bash
+systemctl --user status blacksharkd
 blackshark-ctl status
+blackshark-ctl battery
+blackshark-ctl sidetone <0-15>
+blackshark-ctl eq <0-8>
+blackshark-ctl thx <on|off>
+blackshark-ctl anc <on|off> [level]
+blackshark-ctl power-savings <0|15|30|45|60>
+blackshark-ctl monitor
 ```
 
-**3. Start the system tray:**
-```bash
-blackshark-tray &
-```
-The tray icon appears in your taskbar with battery %, quick toggles for EQ, sidetone, THX, and ANC, and a Daemon submenu if you need to restart it.
-
-**4. Open the settings GUI:**
-```bash
-blackshark-gui
-```
-All settings are applied immediately and sync back to the tray in real time.
-
-**5. Add the tray to autostart** so it launches on login:
-```bash
-install -m644 pkg/blackshark-tray.desktop ~/.config/autostart/
-```
-Or on KDE: Settings → Autostart → Add Application → search "BlackShark Tray".
-
----
-
-## Usage
-
-### Daemon
-
-```bash
-systemctl --user status blacksharkd
-systemctl --user restart blacksharkd
-```
-
-### CLI
-
-```bash
-blackshark-ctl status           # human-readable status
-blackshark-ctl status --json    # JSON output for waybar/scripts
-blackshark-ctl battery          # battery percentage and charging state
-blackshark-ctl sidetone <0-15>  # set sidetone level
-blackshark-ctl eq <0-8>         # set EQ preset (0 = Flat)
-blackshark-ctl thx <on|off>     # toggle THX Spatial Audio
-blackshark-ctl anc <on|off> [level]  # toggle ANC, optional level 1-4
-blackshark-ctl power-savings <0|15|30|45|60>  # auto-off timeout in minutes
-blackshark-ctl monitor          # stream live D-Bus property changes
-```
-
-### System tray
+Run the desktop clients directly:
 
 ```bash
 blackshark-tray &
-```
-
-Add to your desktop autostart. Shows battery % in the tooltip, quick toggles and submenus for all settings in the menu, and a Daemon submenu to start/stop/restart the daemon.
-
-### GUI
-
-```bash
 blackshark-gui
 ```
 
-Full settings panel. All changes are applied immediately via D-Bus and sync back to the tray and CLI in real time. The Advanced tab has daemon controls, a live log viewer, and an opt-in toggle for the experimental PipeWire game/chat mix feature.
+The tray shows connection transport, microphone mute state, battery status,
+and quick controls. The GUI exposes the full configuration and experimental
+audio-routing tools.
 
-### Wired USB mode (Xbox edition)
+Optional KDE application-launcher and tray-autostart entries are included:
 
-Connecting the headset cable exposes a second USB-audio device with PID `0x0a4e`.
-The daemon detects this device and reports the active transport as `usb`, while
-continuing to use the wireless dongle for proprietary controls when available.
-
-The wired interface advertises the same HID report layout as the dongle, but it
-does not answer the proprietary command protocol. Physical mute changes also do
-not produce HID or USB-audio mixer events in wired mode, so mute state is shown
-as unknown rather than guessed. KDE/PipeWire handles switching between the
-wireless and wired audio devices independently of the daemon.
-
----
+```bash
+install -Dm644 pkg/blackshark-gui.desktop \
+  ~/.local/share/applications/blackshark-gui.desktop
+install -Dm644 pkg/blackshark-tray.desktop \
+  ~/.config/autostart/blackshark-tray.desktop
+```
 
 ## Architecture
 
-```
-blackshark-ctl  (CLI)  ──┐
-blackshark-tray (tray) ──┤  D-Bus: net.blackshark1 (session bus)
-blackshark-gui  (GUI)  ──┘
-                          │
-                    blacksharkd  (systemd user service)
-                          │
-                    /dev/hidraw*  (hidapi)
-                          │
-                    BlackShark V3 Pro dongle (USB)
-```
-
-The daemon owns the HID device exclusively. All other tools talk to it over D-Bus (`net.blackshark1`, session bus, path `/net/blackshark1/Headset`). No tool other than the daemon touches `/dev/hidraw*`.
-
----
-
-## Repository layout
-
-```
-crates/
-  protocol/          HID report format and command constants
-  device/            hidapi open/send/recv
-  blackshark-client/ zbus D-Bus proxy (shared by CLI, tray, GUI)
-  blacksharkd/       daemon: HID ownership, D-Bus service, battery polling
-  blackshark-ctl/    CLI client
-  blackshark-tray/   ksni system tray
-  blackshark-gui/    slint settings GUI
-pkg/
-  99-blackshark.rules      udev rule
-  blacksharkd.service      systemd user unit
-  blackshark-gui.desktop   app launcher entry (copy to ~/.local/share/applications/)
-  blackshark-tray.desktop  autostart entry (copy to ~/.config/autostart/)
-install.sh                 one-shot build + install script
+```text
+blackshark-ctl  (CLI)  --+
+blackshark-tray (tray) --+-- D-Bus: net.blackshark1
+blackshark-gui  (GUI)  --+              |
+                                    blacksharkd
+                                         |
+                                     /dev/hidraw*
+                                         |
+                              BlackShark wireless dongle
 ```
 
----
+`blacksharkd` is the sole owner of the proprietary HID interface. Clients use
+the session-bus service `net.blackshark1` at
+`/net/blackshark1/Headset`; they do not access `hidraw` directly.
 
-## udev rule
+The wired Xbox USB interface is enumerated only to detect transport presence.
+It is never opened as a proprietary command channel.
 
-The udev rule grants the `users` group read/write access to the headset's HID interface:
+## Development
 
-```
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="0577", MODE="0660", GROUP="users"
-SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1532", ATTRS{idProduct}=="0a55", MODE="0660", GROUP="users"
-```
-
-Make sure your user is in the `users` group (`groups $USER`). If not:
+Run the same checks used by CI:
 
 ```bash
-sudo usermod -aG users $USER
-# log out and back in, then re-run install.sh
+cargo fmt --all -- --check
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 ```
 
----
+This fork keeps `RiskRunner0/blackshark-linux` configured as the `upstream`
+remote. New work should use feature branches and merge into this fork's
+`master` after review and hardware testing.
 
-## CI
+## Credits
 
-GitHub Actions runs on every push:
-- `cargo fmt --check`
-- `cargo clippy -D warnings`
-- `cargo build --all`
-- `cargo test --all`
+- Original project and architecture:
+  [RiskRunner0/blackshark-linux](https://github.com/RiskRunner0/blackshark-linux)
+- Xbox edition support:
+  [callingmybluff](https://github.com/callingmybluff) via upstream
+  [PR #11](https://github.com/RiskRunner0/blackshark-linux/pull/11)
+- Maintained fork, HID fixes, mute state, and wired transport support: Rafael Robles
 
-Security audit runs weekly via `cargo audit`. Release builds for `x86_64` are produced automatically on version tags.
+The Git history is intentionally preserved so authorship remains attached to
+each contribution.
 
----
+## License status
 
-## Device info
+The upstream project currently has no explicit software license. Under default
+copyright rules, a public repository should not be assumed to grant permission
+for independent redistribution or derivative releases.
 
-- USB VID/PID: `0x1532` / `0x0577` (PC dongle), `0x1532` / `0x0a55` (Xbox dongle), or `0x1532` / `0x0a4e` (Xbox wired USB audio)
-- HID reports: 64 bytes, report ID `0x02`
-- Interface: HID interface 5, endpoint `0x84`
-- Protocol: custom Razer HID (not HID++ or OpenRazer-compatible)
+This repository remains a GitHub fork while licensing is clarified with the
+upstream author and contributors. Do not publish independent release artifacts
+from this fork until an explicit license is established.
