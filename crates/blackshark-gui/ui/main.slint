@@ -53,6 +53,7 @@ component TabButton inherits Rectangle {
 
 component DeviceTab inherits ScrollView {
     in property <bool>       connected;
+    in property <string>     connection-transport;
     in property <int>        battery-pct;
     in property <bool>       charging;
     in-out property <bool>   thx-enabled;
@@ -78,7 +79,11 @@ component DeviceTab inherits ScrollView {
             HorizontalBox {
                 Text { text: "Connection:"; color: Palette.foreground; font-weight: 600; }
                 Text {
-                    text: connected ? "Connected" : "Disconnected";
+                    text: connection-transport == "usb"
+                        ? (connected ? "Connected (USB)" : "USB connected (controls unavailable)")
+                        : connection-transport == "wireless"
+                            ? "Connected (wireless)"
+                            : "Disconnected";
                     color: connected ? #4caf50 : #f44336;
                 }
             }
@@ -575,6 +580,7 @@ export component MainWindow inherits Window {
     // State
     in-out property <int>  active-tab: 0;
     in property <bool>       connected;
+    in property <string>     connection-transport;
     in property <int>        battery-pct;
     in property <bool>       charging;
     in property <int>        eq-preset;
@@ -652,6 +658,7 @@ export component MainWindow inherits Window {
         // Content
         if active-tab == 0: DeviceTab {
             connected:     connected;
+            connection-transport: connection-transport;
             battery-pct:   battery-pct;
             charging:      charging;
             thx-enabled <=> thx-enabled;

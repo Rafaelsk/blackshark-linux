@@ -126,6 +126,7 @@ async fn main() -> Result<()> {
 #[derive(Serialize)]
 struct Status {
     connected: bool,
+    connection_transport: String,
     battery_percentage: u8,
     eq_preset: u8,
     sidetone: u8,
@@ -138,6 +139,7 @@ struct Status {
 async fn cmd_status(proxy: &HeadsetProxy<'_>) -> Result<()> {
     let status = Status {
         connected: proxy.connected().await?,
+        connection_transport: proxy.connection_transport().await?,
         battery_percentage: proxy.battery_percentage().await?,
         eq_preset: proxy.eq_preset().await?,
         sidetone: proxy.sidetone().await?,
@@ -163,7 +165,8 @@ async fn cmd_monitor(proxy: &HeadsetProxy<'_>) -> Result<()> {
     if proxy.connected().await? {
         let (pct, charging) = proxy.get_battery().await?;
         println!(
-            "connected  battery={}% charging={} sidetone={}",
+            "connected  transport={} battery={}% charging={} sidetone={}",
+            proxy.connection_transport().await?,
             pct,
             charging,
             proxy.sidetone().await?
@@ -174,6 +177,7 @@ async fn cmd_monitor(proxy: &HeadsetProxy<'_>) -> Result<()> {
 
     let mut battery_stream = proxy.receive_battery_changed().await?;
     let mut connected_stream = proxy.receive_connected_changed().await;
+    let mut transport_stream = proxy.receive_connection_transport_changed().await;
     let mut sidetone_stream = proxy.receive_sidetone_changed().await;
 
     loop {
@@ -185,6 +189,10 @@ async fn cmd_monitor(proxy: &HeadsetProxy<'_>) -> Result<()> {
             Some(change) = connected_stream.next() => {
                 let val = change.get().await?;
                 println!("connected_changed  connected={val}");
+            }
+            Some(change) = transport_stream.next() => {
+                let val = change.get().await?;
+                println!("connection_transport_changed  transport={val}");
             }
             Some(change) = sidetone_stream.next() => {
                 let val = change.get().await?;

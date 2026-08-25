@@ -6,12 +6,33 @@ use blackshark_protocol::{Report, ResponseStatus, REPORT_LEN};
 
 const VID: u16 = 0x1532;
 
+/// Wired USB-audio identity for the BlackShark V3 Pro Xbox edition.
+///
+/// Its interface 5 advertises the same report layout as the dongle, but does
+/// not answer the proprietary command protocol. It is presence-only here and
+/// must not be returned by [`open`].
+const WIRED_PID: u16 = 0x0a4e;
+
 /// Product IDs for the dongle, covering both the PC and Xbox editions —
 /// they share the same proprietary HID protocol.
 const PIDS: &[u16] = &[
     0x0577, // BlackShark V3 Pro
     0x0a55, // BlackShark V3 Pro for Xbox
 ];
+
+/// Whether the wired USB-audio transport is currently attached.
+///
+/// This intentionally enumerates without opening the HID interface. The wired
+/// device is useful as a transport-presence signal, not as a command channel.
+pub fn wired_present() -> Result<bool> {
+    let api = HidApi::new().context("failed to initialise hidapi")?;
+
+    let present = api.device_list().any(|info| {
+        info.vendor_id() == VID && info.product_id() == WIRED_PID && info.interface_number() == 5
+    });
+
+    Ok(present)
+}
 
 /// Open the BlackShark V3 Pro HID device.
 ///

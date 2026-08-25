@@ -14,6 +14,7 @@ Controls sidetone, EQ presets, THX Spatial Audio, Active Noise Cancellation, and
 - **ANC** — enable/disable and set level (1–4)
 - **Power savings** — auto-off timeout (off, 15, 30, 45, 60 min)
 - **Battery** — percentage and charging status, polled every 5 minutes
+- **Transport detection** — reports wireless, wired USB, or disconnected state
 - **Settings persist** — config saved to `~/.config/blackshark/config.toml`, restored on reconnect
 - **System tray** — battery %, quick toggles, EQ/sidetone submenus, daemon controls
 - **GUI** — full settings panel with live updates
@@ -137,6 +138,18 @@ blackshark-gui
 
 Full settings panel. All changes are applied immediately via D-Bus and sync back to the tray and CLI in real time. The Advanced tab has daemon controls, a live log viewer, and an opt-in toggle for the experimental PipeWire game/chat mix feature.
 
+### Wired USB mode (Xbox edition)
+
+Connecting the headset cable exposes a second USB-audio device with PID `0x0a4e`.
+The daemon detects this device and reports the active transport as `usb`, while
+continuing to use the wireless dongle for proprietary controls when available.
+
+The wired interface advertises the same HID report layout as the dongle, but it
+does not answer the proprietary command protocol. Physical mute changes also do
+not produce HID or USB-audio mixer events in wired mode, so mute state is shown
+as unknown rather than guessed. KDE/PipeWire handles switching between the
+wireless and wired audio devices independently of the daemon.
+
 ---
 
 ## Architecture
@@ -210,7 +223,7 @@ Security audit runs weekly via `cargo audit`. Release builds for `x86_64` are pr
 
 ## Device info
 
-- USB VID/PID: `0x1532` / `0x0577` (PC edition) or `0x1532` / `0x0a55` (Xbox edition)
+- USB VID/PID: `0x1532` / `0x0577` (PC dongle), `0x1532` / `0x0a55` (Xbox dongle), or `0x1532` / `0x0a4e` (Xbox wired USB audio)
 - HID reports: 64 bytes, report ID `0x02`
 - Interface: HID interface 5, endpoint `0x84`
 - Protocol: custom Razer HID (not HID++ or OpenRazer-compatible)

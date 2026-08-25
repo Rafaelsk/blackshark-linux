@@ -8,6 +8,7 @@ use zbus::Connection;
 #[derive(Clone, Debug)]
 struct HeadsetState {
     connected: bool,
+    transport: String,
     battery_pct: u8,
     charging: bool,
     eq_preset: u8,
@@ -24,6 +25,7 @@ impl Default for HeadsetState {
     fn default() -> Self {
         Self {
             connected: false,
+            transport: "none".into(),
             battery_pct: 0,
             charging: false,
             eq_preset: 0,
@@ -35,6 +37,14 @@ impl Default for HeadsetState {
             daemon_status: "unknown".into(),
             mic_mute: "unknown".into(),
         }
+    }
+}
+
+fn mic_mute_label(state: &str) -> &'static str {
+    match state {
+        "muted" => "Muted",
+        "unmuted" => "Unmuted",
+        _ => "Unknown",
     }
 }
 
@@ -73,11 +83,24 @@ impl Tray for BlacksharkTray {
 
     fn tool_tip(&self) -> ksni::ToolTip {
         let s = self.state.lock().unwrap();
+        let mic_mute = mic_mute_label(&s.mic_mute);
         let description = if !s.connected {
-            "Disconnected".into()
+            if s.transport == "usb" {
+                format!("Wired USB — controls unavailable — Microphone: {mic_mute}")
+            } else {
+                format!("Disconnected — Microphone: {mic_mute}")
+            }
         } else {
             let charging = if s.charging { " (charging)" } else { "" };
-            format!("{}%{} — Sidetone {}", s.battery_pct, charging, s.sidetone)
+            let transport = if s.transport == "usb" {
+                "Wired USB"
+            } else {
+                "Wireless"
+            };
+            format!(
+                "{transport} — {}%{} — Microphone: {mic_mute} — Sidetone {}",
+                s.battery_pct, charging, s.sidetone,
+            )
         };
         ksni::ToolTip {
             icon_name: String::new(),
@@ -90,14 +113,33 @@ impl Tray for BlacksharkTray {
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let s = self.state.lock().unwrap().clone();
 
+        let connection_label = match (s.transport.as_str(), s.connected) {
+            ("usb", true) => "Connection: Wired USB",
+            ("usb", false) => "Connection: Wired USB (controls unavailable)",
+            ("wireless", true) => "Connection: Wireless",
+            _ => "Connection: Disconnected",
+        };
+
+        let mic_mute_label = format!("Microphone: {}", mic_mute_label(&s.mic_mute));
+
         let battery_label = if !s.connected {
-            "Not connected".into()
+            "Battery: unavailable".into()
         } else {
             let charging = if s.charging { " (charging)" } else { "" };
             format!("Battery: {}%{}", s.battery_pct, charging)
         };
 
         let mut items: Vec<MenuItem<Self>> = vec![
+            MenuItem::Standard(StandardItem {
+                label: connection_label.into(),
+                enabled: false,
+                ..Default::default()
+            }),
+            MenuItem::Standard(StandardItem {
+                label: mic_mute_label,
+                enabled: false,
+                ..Default::default()
+            }),
             MenuItem::Standard(StandardItem {
                 label: battery_label,
                 enabled: false,
@@ -396,6 +438,10 @@ async fn main() -> Result<()> {
     // Load initial state from daemon — fetch all values before locking.
     if let Ok(proxy) = HeadsetProxy::new(&conn).await {
         if let Ok(connected) = proxy.connected().await {
+            let transport = proxy
+                .connection_transport()
+                .await
+                .unwrap_or_else(|_| "none".into());
             let (
                 battery_pct,
                 eq_preset,
@@ -424,6 +470,7 @@ async fn main() -> Result<()> {
             };
             let mut s = state.lock().unwrap();
             s.connected = connected;
+            s.transport = transport;
             if connected {
                 s.battery_pct = battery_pct;
                 s.eq_preset = eq_preset;
@@ -471,6 +518,7 @@ async fn main() -> Result<()> {
 
         let mut battery_stream = proxy.receive_battery_changed().await.ok();
         let mut connected_stream = proxy.receive_connected_changed().await;
+        let mut transport_stream = proxy.receive_connection_transport_changed().await;
         let mut mic_mute_stream = proxy.receive_mic_mute_state_changed().await;
         let mut sidetone_stream = proxy.receive_sidetone_changed().await;
         let mut thx_stream = proxy.receive_thx_enabled_changed().await;
@@ -492,6 +540,12 @@ async fn main() -> Result<()> {
                             Some(change) = connected_stream.next() => {
                                 if let Ok(val) = change.get().await {
                                     state2.lock().unwrap().connected = val;
+                                }
+                                handle.update(|_| {});
+                            }
+                            Some(change) = transport_stream.next() => {
+                                if let Ok(val) = change.get().await {
+                                    state2.lock().unwrap().transport = val;
                                 }
                                 handle.update(|_| {});
                             }

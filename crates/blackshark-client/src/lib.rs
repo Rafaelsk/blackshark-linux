@@ -43,6 +43,10 @@ pub trait Headset {
     #[zbus(property)]
     fn connected(&self) -> zbus::Result<bool>;
 
+    /// Active headset transport: "usb", "wireless", or "none".
+    #[zbus(property)]
+    fn connection_transport(&self) -> zbus::Result<String>;
+
     /// Current physical microphone mute state.
     #[zbus(property)]
     fn mic_mute_state(&self) -> zbus::Result<String>;

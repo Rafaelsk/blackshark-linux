@@ -9,7 +9,7 @@ use blackshark_device as device;
 use blackshark_protocol::{cmd, Report, ResponseStatus};
 
 use crate::config::Config;
-use crate::state::{MicMuteState, SharedState};
+use crate::state::{MicMuteState, SharedState, Transport};
 
 // ---------------------------------------------------------------------------
 // Public command API
@@ -88,6 +88,25 @@ fn run(
         match rx.try_recv() {
             Ok(cmd) => match cmd {
                 HidCommand::Tick => {
+                    match device::wired_present() {
+                        Ok(wired_present) => {
+                            let transport = if wired_present {
+                                Transport::Usb
+                            } else if device_ready {
+                                Transport::Wireless
+                            } else {
+                                Transport::None
+                            };
+
+                            let previous = state_tx.borrow().transport;
+                            if transport != previous {
+                                info!(transport = transport.as_str(), "active transport changed");
+                                state_tx.send_modify(|s| s.transport = transport);
+                            }
+                        }
+                        Err(e) => warn!("failed to detect wired transport: {e}"),
+                    }
+
                     if dev.is_none() {
                         if let Some(d) = try_open() {
                             dev = Some(d);
@@ -120,6 +139,9 @@ fn run(
 
                                         state_tx.send_modify(|s| {
                                             s.connected = true;
+                                            if s.transport == Transport::None {
+                                                s.transport = Transport::Wireless;
+                                            }
                                             s.battery_pct = b.percentage;
                                             s.charging = b.charging;
 
@@ -147,6 +169,9 @@ fn run(
 
                                         state_tx.send_modify(|s| {
                                             s.connected = false;
+                                            if s.transport == Transport::Wireless {
+                                                s.transport = Transport::None;
+                                            }
                                             s.mic_mute = MicMuteState::Unknown;
                                         });
                                     } else {
@@ -310,6 +335,9 @@ fn run(
 
                             state_tx.send_modify(|s| {
                                 s.connected = false;
+                                if s.transport == Transport::Wireless {
+                                    s.transport = Transport::None;
+                                }
                                 s.mic_mute = MicMuteState::Unknown;
                             });
                         }
@@ -406,12 +434,10 @@ fn handle_unsolicited_report(report: &Report, state_tx: &watch::Sender<SharedSta
         //
         // We only rely on the 0x00 case we have directly observed.
         // Do not infer semantics for other values yet.
-        0x20 => {
-            if report.args().first().copied() == Some(0x00) {
-                state_tx.send_modify(|s| s.mic_mute = MicMuteState::Unknown);
+        0x20 if report.args().first().copied() == Some(0x00) => {
+            state_tx.send_modify(|s| s.mic_mute = MicMuteState::Unknown);
 
-                info!("microphone mute state unknown");
-            }
+            info!("microphone mute state unknown");
         }
 
         _ => {}

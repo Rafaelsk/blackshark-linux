@@ -131,6 +131,12 @@ impl HeadsetInterface {
         self.state_rx.borrow().connected
     }
 
+    /// Active headset transport: "usb", "wireless", or "none".
+    #[zbus(property)]
+    async fn connection_transport(&self) -> &'static str {
+        self.state_rx.borrow().transport.as_str()
+    }
+
     /// Current physical microphone mute state.
     #[zbus(property)]
     async fn mic_mute_state(&self) -> &'static str {

@@ -114,6 +114,13 @@ async fn main() -> Result<()> {
     if let Ok(proxy) = HeadsetProxy::new(&conn).await {
         if let Ok(connected) = proxy.connected().await {
             window.set_connected(connected);
+            window.set_connection_transport(
+                proxy
+                    .connection_transport()
+                    .await
+                    .unwrap_or_else(|_| "none".into())
+                    .into(),
+            );
             if connected {
                 window.set_battery_pct(proxy.battery_percentage().await.unwrap_or(0) as i32);
                 window.set_eq_preset(proxy.eq_preset().await.unwrap_or(0) as i32);
@@ -363,6 +370,7 @@ async fn main() -> Result<()> {
 
             let mut battery_stream = proxy.receive_battery_changed().await.ok();
             let mut connected_stream = proxy.receive_connected_changed().await;
+            let mut transport_stream = proxy.receive_connection_transport_changed().await;
             let mut eq_stream = proxy.receive_eq_preset_changed().await;
             let mut sidetone_stream = proxy.receive_sidetone_changed().await;
             let mut thx_stream = proxy.receive_thx_enabled_changed().await;
@@ -418,6 +426,16 @@ async fn main() -> Result<()> {
                                     _ => {}
                                 }
                             }
+                        }
+                    }
+                    Some(change) = transport_stream.next() => {
+                        if let Ok(val) = change.get().await {
+                            let w = window_weak.clone();
+                            slint::invoke_from_event_loop(move || {
+                                if let Some(win) = w.upgrade() {
+                                    win.set_connection_transport(val.into());
+                                }
+                            }).ok();
                         }
                     }
                     Some(change) = eq_stream.next() => {
